@@ -1,6 +1,6 @@
 # RedSun Exploit — Analysis
 
-**Analyst:** Mahmoud Saeed  
+**Analyst:** Shellcod3  
 **Date:** 2026-04-18  
 **Severity:** Critical — Local Privilege Escalation to SYSTEM  
 
