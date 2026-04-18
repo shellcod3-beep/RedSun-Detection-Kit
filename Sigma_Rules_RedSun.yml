@@ -1,0 +1,234 @@
+# =============================================================================
+# RedSun Sigma Detection Rules
+# Analyst: Mahmoud Saeed | Date: 2026-04-18
+# Technique: LPE via AV-Induced VSS Race + Cloud Files + Directory Junction
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# RULE 1: Hardcoded named pipe creation
+# -----------------------------------------------------------------------------
+title: RedSun - Hardcoded Named Pipe REDSUN Created
+id: f4a9c3e1-0001-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects creation of the named pipe \\.\pipe\REDSUN, which is hardcoded in the
+  RedSun exploit. This pipe is used for inter-process signaling between the
+  exploit's SYSTEM instance and the user-session conhost launcher.
+references:
+  - Internal RedSun analysis
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.privilege_escalation
+  - attack.t1574
+logsource:
+  category: pipe_created
+  product: windows
+detection:
+  selection:
+    PipeName|endswith: '\REDSUN'
+  condition: selection
+falsepositives:
+  - None known
+level: critical
+
+---
+# -----------------------------------------------------------------------------
+# RULE 2: Fake Cloud Sync provider registered in SyncRootManager
+# -----------------------------------------------------------------------------
+title: RedSun - Suspicious Cloud Sync Root Registered (SERIOUSLYMSFT)
+id: f4a9c3e1-0002-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects the registration of a Cloud Files sync root using the hardcoded
+  provider name "SERIOUSLYMSFT" in the Windows SyncRootManager registry key.
+  The exploit registers a fake OneDrive-style provider to create dehydrated
+  file placeholders in %TEMP% as part of the race condition.
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.privilege_escalation
+  - attack.defense_evasion
+  - attack.t1036
+logsource:
+  product: windows
+  category: registry_set
+detection:
+  selection:
+    TargetObject|contains:
+      - '\Software\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager\'
+      - 'SERIOUSLYMSFT'
+  condition: selection
+falsepositives:
+  - None known
+level: critical
+
+---
+# -----------------------------------------------------------------------------
+# RULE 3: TieringEngineService.exe written by non-Windows-Update process
+# -----------------------------------------------------------------------------
+title: RedSun - TieringEngineService.exe Written to System32 by Untrusted Process
+id: f4a9c3e1-0003-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects creation or modification of TieringEngineService.exe in System32 by
+  any process that is not a legitimate Windows Update component. This is the
+  final payload write in the RedSun exploit chain. This file should never be
+  written by user-mode processes under normal conditions.
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.privilege_escalation
+  - attack.t1574.010
+  - attack.t1036.005
+logsource:
+  category: file_event
+  product: windows
+detection:
+  selection:
+    TargetFilename|endswith: '\Windows\System32\TieringEngineService.exe'
+  filter_legit:
+    Image|startswith:
+      - 'C:\Windows\System32\TiWorker.exe'
+      - 'C:\Windows\System32\wuauclt.exe'
+      - 'C:\Windows\SoftwareDistribution\'
+      - 'C:\Windows\WinSxS\'
+  condition: selection and not filter_legit
+falsepositives:
+  - Windows Update applying storage tiering component updates (very rare)
+level: critical
+
+---
+# -----------------------------------------------------------------------------
+# RULE 4: Reparse point (junction) created on TEMP directory
+# -----------------------------------------------------------------------------
+title: RedSun - Mount Point Reparse Set on TEMP Subdirectory
+id: f4a9c3e1-0004-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects a reparse point (IO_REPARSE_TAG_MOUNT_POINT) being set on a
+  subdirectory of %TEMP%. The exploit converts its working directory into a
+  junction targeting C:\Windows\System32 to redirect subsequent file writes.
+  Legitimate applications almost never create junctions inside Temp.
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.privilege_escalation
+  - attack.t1574
+logsource:
+  product: windows
+  category: file_event
+detection:
+  selection:
+    EventID: 12
+    TargetFilename|contains:
+      - '\AppData\Local\Temp\RS-'
+      - '\Temp\RS-'
+  condition: selection
+falsepositives:
+  - Legitimate sync clients creating junctions in Temp (extremely rare)
+level: high
+
+---
+# -----------------------------------------------------------------------------
+# RULE 5: SYSTEM process spawning conhost.exe in user session
+# -----------------------------------------------------------------------------
+title: RedSun - SYSTEM Process Launching ConHost in Interactive User Session
+id: f4a9c3e1-0005-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects conhost.exe being spawned by a process running as SYSTEM with
+  System integrity level, where the parent is not a known legitimate system
+  process. This matches the RedSun post-exploitation behavior where the SYSTEM
+  instance clones its token into the user session to launch a console.
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.privilege_escalation
+  - attack.t1134.001
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    Image|endswith: '\conhost.exe'
+    User|contains: 'SYSTEM'
+    IntegrityLevel: 'System'
+  filter_legit:
+    ParentImage|startswith:
+      - 'C:\Windows\System32\csrss.exe'
+      - 'C:\Windows\System32\wininit.exe'
+      - 'C:\Windows\System32\services.exe'
+  condition: selection and not filter_legit
+falsepositives:
+  - Rare system management tools that legitimately spawn console hosts as SYSTEM
+level: high
+
+---
+# -----------------------------------------------------------------------------
+# RULE 6: TieringEngineService.exe launched outside of SCM/svchost
+# -----------------------------------------------------------------------------
+title: RedSun - Storage Tiers Service Launched by Anomalous Parent
+id: f4a9c3e1-0006-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects TieringEngineService.exe being launched by any process other than
+  svchost.exe (the normal SCM host). In the RedSun exploit, the attacker
+  instantiates the Storage Tiers Management COM object directly to trigger
+  execution of the planted binary under SYSTEM.
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.execution
+  - attack.privilege_escalation
+  - attack.t1574.010
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    Image|endswith: '\TieringEngineService.exe'
+  filter_legit:
+    ParentImage|startswith:
+      - 'C:\Windows\System32\svchost.exe'
+  condition: selection and not filter_legit
+falsepositives:
+  - None known in practice
+level: critical
+
+---
+# -----------------------------------------------------------------------------
+# RULE 7: EICAR file created in TEMP followed by VSS snapshot (correlate in SIEM)
+# -----------------------------------------------------------------------------
+title: RedSun - EICAR Drop in TEMP Correlated with VSS Snapshot Creation
+id: f4a9c3e1-0007-4f8a-91bc-3e4d5a6b7c8d
+status: experimental
+description: >
+  Detects a Volume Shadow Copy snapshot being created within 30 seconds of an
+  EICAR test file appearing in a %TEMP% subdirectory. This matches the first
+  phase of the RedSun exploit where EICAR is deliberately written to trigger
+  Windows Defender's pre-quarantine VSS behavior.
+  NOTE: This rule requires SIEM-level correlation between file events and
+  VSS/WMI events. Implement as a time-windowed join in Splunk or Elastic.
+  Splunk example:
+    index=sysmon EventCode=11 TargetFilename="*\\Temp\\RS-*"
+    | join type=inner max=1
+      [ search index=wmi EventCode=19 CommandLine="*shadow*" ]
+    | where abs(_time - _time2) < 30
+author: Mahmoud Saeed
+date: 2026/04/18
+tags:
+  - attack.defense_evasion
+  - attack.t1490
+logsource:
+  product: windows
+  service: system
+detection:
+  vss_snapshot:
+    EventID: 8193
+    Provider_Name: 'VSS'
+  condition: vss_snapshot
+  # Correlate externally with file_event for EICAR in %TEMP%\RS-* within 30s
+falsepositives:
+  - Legitimate backup software triggering VSS near coincidental temp file activity
+level: medium
