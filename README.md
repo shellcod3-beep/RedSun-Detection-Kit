@@ -17,8 +17,8 @@ This repository contains analysis and detection tools for the **RedSun** exploit
 
 ## Get the Full Kit
 
-For a complete, ready‑to‑deploy response kit, see my gig on **[Fiverr link]** or **[Upwork link]** (links coming soon).
+For a complete, ready‑to‑deploy response kit, see my gig on **(http://www.fiverr.com/s/wk0xRgB)** or **[Upwork link]** .
 
 ## Support My Work
 
-If you find this useful, consider [buying me a coffee ☕](https://buymeacoffee.com/yourusername) (set up later).
+If you find this useful, consider [buying me a coffee ☕]((https://www.buymeacoffee.com/shellcod3)) (set up later).
