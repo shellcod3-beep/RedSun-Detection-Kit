@@ -15,10 +15,6 @@ This repository contains analysis and detection tools for the **RedSun** exploit
 - `mitigation_guide.md` – Immediate steps for Windows admins.
 - `detect_redsun.ps1` – PowerShell script to scan for RedSun artifacts.
 
-## Get the Full Kit
-
-For a complete, ready‑to‑deploy response kit, see my gig on **(http://www.fiverr.com/s/wk0xRgB)** or **[Upwork link]** .
-
 ## Support My Work
 
-If you find this useful, consider [buying me a coffee ☕]((https://www.buymeacoffee.com/shellcod3)) (set up later).
+If you find this useful, consider [buying me a coffee ☕]((https://www.buymeacoffee.com/shellcod3)).
